@@ -15,7 +15,7 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(cors(
     {
-        origin: "http://localhost:5173", // frontend URL
+        origin: "https://lead-management-system-y55j.vercel.app",
         credentials: true,
     }
 ));
