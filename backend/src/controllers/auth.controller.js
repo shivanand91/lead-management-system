@@ -1,82 +1,101 @@
-import User from "../models/user.model.js"
-import jwt from 'jsonwebtoken'
-import bcrypt from "bcryptjs"
+import User from "../models/user.model.js";
+import Token from "../models/token.model.js";
+import generateToken from "../utils/generateToken.js";
+import cookieOptions from "../config/cookieOptions.js";
 
-const generateToken = (res, userId) => {
-  const token = jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
-  res.cookie('jwt', token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-    maxAge: 7 * 24 * 60 * 60 * 1000
-  });
-};
-
-export const register = async (req, res) => {
+export const registerUser = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
+    
     if (!name || !email || !password) {
-      return res.status(400).json({ message: "All Fields Required!" });
+      return res.status(400).json({ message: "All fields (name, email, password) are required" });
     }
 
-    const existUser = await User.findOne({ email });
+    if (name.length < 2) {
+      return res.status(400).json({ message: "Name must be at least 2 characters" });
+    }
 
-    if (existUser) {
-      return res.status(409).json({ message: "User already exist!" });
-    }    
+    const emailRegex = /^\S+@\S+\.\S+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: "Invalid email format" });
+    }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    if (password.length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters" });
+    }
 
-    const user = await User.create({ name, email, password: hashedPassword });
-    generateToken(res, user._id);
-    
-    // Generate token
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    
-    // Save token in the user's record (ensure your User model has a field for token)
-    user.token = token;
-    await user.save();
+    const exists = await User.findOne({ email });
+    if (exists) {
+      return res.status(400).json({ message: "User already exists" });
+    }
 
-    res.status(201).json({
-      message: "User created successfully!",
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      token
-    });
-
-  } catch (err) {
-    res.status(400).json({ message: err.message });
+    const user = await User.create({ name, email, password });
+    res.status(201).json({ message: "User registered successfully", user });
+  } catch (error) {
+    console.error("Register Error:", error.message);
+    res.status(500).json({ message: "Server error during registration" });
   }
 };
 
-export const login = async (req, res) => {
+
+export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({message: "All fields are required!"})
+      return res.status(400).json({ message: "Email and password are required" });
     }
 
     const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
 
-    if (!user) return res.status(401).json({ message: 'User not exist' });
+    const isMatch = await user.matchPassword(password);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(401).json({ message: 'Invalid credentials' });
-    generateToken(res, user._id);
-    res.status(200).json({message: "User logged in successfully!", id: user._id, name: user.name, email: user.email });
-  } catch (err) {
-    res.status(400).json({ message: err.message });
+  
+    const token = await generateToken(user._id);
+    res.cookie("jwt", token, cookieOptions);
+
+    res.json({
+      message: "Login successful",
+      user: { id: user._id, name: user.name, email: user.email },
+    });
+  } catch (error) {
+    console.error("Login Error:", error.message);
+    res.status(500).json({ message: "Server error during login" });
   }
 };
 
-export const logout = (req, res) => {
-  res.cookie('jwt', '', { httpOnly: true, expires: new Date(0) });
-  res.status(200).json({ message: 'Logged out' });
+
+export const logoutUser = async (req, res) => {
+  try {
+    const token = req.cookies?.jwt;
+    if (token) {
+      await Token.deleteOne({ token });
+    }
+    res.clearCookie("jwt");
+    res.json({ message: "Logged out successfully" });
+  } catch (error) {
+    console.error("Logout Error:", error.message);
+    res.status(500).json({ message: "Server error during logout" });
+  }
 };
 
-export const currentUser = (req, res) => {
-  res.status(200).json({ id: req.userId });
+
+export const getCurrentUser = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select("-password");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    res.json(user);
+  } catch (error) {
+    console.error("Get Current User Error:", error.message);
+    res.status(500).json({ message: "Server error fetching user" });
+  }
 };

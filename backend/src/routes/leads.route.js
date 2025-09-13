@@ -1,13 +1,16 @@
-import express from "express"
-import { createLead, getLeads, getLeadById, updateLead, deleteLead } from '../controllers/lead.controller.js';
-import auth from '../middleware/auth.middleware.js'
+import express from "express";
+import { createLead, getLeads, getLead, updateLead, deleteLead } from "../controllers/lead.controller.js";
+import protect from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
-router.post('/', auth, createLead);
-router.get('/', auth, getLeads);
-router.get('/:id', auth, getLeadById);
-router.put('/:id', auth, updateLead);
-router.delete('/:id', auth, deleteLead);
+router.route("/")
+  .post(protect, createLead)
+  .get(protect, getLeads);
+
+router.route("/:id")
+  .get(protect, getLead)
+  .put(protect, updateLead)
+  .delete(protect, deleteLead);
 
 export default router;

@@ -1,79 +1,118 @@
-import Lead from "../models/lead.model.js"
+import Lead from "../models/lead.model.js";
 
+// Create Lead
 export const createLead = async (req, res) => {
   try {
-    const lead = await Lead.create(req.body);
+    const lead = new Lead(req.body);
+    await lead.validate(); // explicit mongoose validation
+    await lead.save();
     res.status(201).json(lead);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
+  } catch (error) {
+    if (error.name === "ValidationError") {
+      return res.status(400).json({ message: "Validation failed", errors: error.errors });
+    }
+    if (error.code === 11000) {
+      return res.status(400).json({ message: "Email already exists" });
+    }
+    res.status(500).json({ message: "Server error" });
   }
 };
 
+// Get Leads with Pagination + Filters
 export const getLeads = async (req, res) => {
   try {
-    const { page = 1, limit = 20, ...filters } = req.query;
+    let { page = 1, limit = 20, ...filters } = req.query;
+    page = Number(page);
+    limit = Number(limit) > 100 ? 100 : Number(limit);
 
-    let query = {};
+    const query = {};
 
-    // String contains
-    if (filters.company) query.company = { $regex: filters.company, $options: 'i' };
-    if (filters.email) query.email = { $regex: filters.email, $options: 'i' };
+    // String filters
+    if (filters.email) query.email = { $regex: filters.email, $options: "i" };
+    if (filters.company) query.company = { $regex: filters.company, $options: "i" };
+    if (filters.city) query.city = { $regex: filters.city, $options: "i" };
 
-    // Enum exact match
+    // Enum filters
     if (filters.status) query.status = filters.status;
     if (filters.source) query.source = filters.source;
 
     // Number filters
+    if (filters.score) query.score = Number(filters.score);
     if (filters.score_gt) query.score = { ...query.score, $gt: Number(filters.score_gt) };
     if (filters.score_lt) query.score = { ...query.score, $lt: Number(filters.score_lt) };
+    if (filters.score_between) {
+      const [min, max] = filters.score_between.split(",").map(Number);
+      query.score = { $gte: min, $lte: max };
+    }
+
+    if (filters.lead_value_gt) query.lead_value = { $gt: Number(filters.lead_value_gt) };
+    if (filters.lead_value_lt) query.lead_value = { $lt: Number(filters.lead_value_lt) };
 
     // Date filters
-    if (filters.created_after) query.createdAt = { ...query.createdAt, $gte: new Date(filters.created_after) };
+    if (filters.created_after) query.createdAt = { $gte: new Date(filters.created_after) };
     if (filters.created_before) query.createdAt = { ...query.createdAt, $lte: new Date(filters.created_before) };
+    if (filters.last_activity_after) query.last_activity_at = { $gte: new Date(filters.last_activity_after) };
+    if (filters.last_activity_before) query.last_activity_at = { ...query.last_activity_at, $lte: new Date(filters.last_activity_before) };
 
+    // Boolean
+    if (filters.is_qualified !== undefined) query.is_qualified = filters.is_qualified === "true";
+
+    // Pagination
     const total = await Lead.countDocuments(query);
     const leads = await Lead.find(query)
-      .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
-      .limit(Number(limit));
+      .limit(limit)
+      .sort({ createdAt: -1 });
 
-    res.status(200).json({
+    res.json({
       data: leads,
-      page: Number(page),
-      limit: Number(limit),
+      page,
+      limit,
       total,
       totalPages: Math.ceil(total / limit),
     });
-  } catch (err) {
-    res.status(400).json({ message: err.message });
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
   }
 };
 
-export const getLeadById = async (req, res) => {
+// Get Single Lead
+export const getLead = async (req, res) => {
   try {
     const lead = await Lead.findById(req.params.id);
-    if (!lead) return res.status(404).json({ message: 'Lead not found' });
-    res.status(200).json(lead);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
+    if (!lead) return res.status(404).json({ message: "Lead not found" });
+    res.json(lead);
+  } catch (error) {
+    res.status(400).json({ message: "Invalid lead ID" });
   }
 };
 
+// Update Lead
 export const updateLead = async (req, res) => {
   try {
-    const lead = await Lead.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!lead) return res.status(404).json({ message: 'Lead not found' });
-    res.status(200).json(lead);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) return res.status(404).json({ message: "Lead not found" });
+
+    Object.assign(lead, req.body);
+    await lead.validate(); // validate before saving
+    await lead.save();
+
+    res.json(lead);
+  } catch (error) {
+    if (error.name === "ValidationError") {
+      return res.status(400).json({ message: "Validation failed", errors: error.errors });
+    }
+    res.status(500).json({ message: "Server error" });
   }
 };
 
+// Delete Lead
 export const deleteLead = async (req, res) => {
   try {
-    await Lead.findByIdAndDelete(req.params.id);
-    res.status(200).json({ message: 'Lead deleted' });
-  } catch (err) {
-    res.status(400).json({ message: err.message });
+    const lead = await Lead.findByIdAndDelete(req.params.id);
+    if (!lead) return res.status(404).json({ message: "Lead not found" });
+    res.json({ message: "Lead deleted successfully" });
+  } catch (error) {
+    res.status(400).json({ message: "Invalid lead ID" });
   }
 };
