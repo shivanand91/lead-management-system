@@ -4,7 +4,7 @@ import Lead from "../models/lead.model.js";
 export const createLead = async (req, res) => {
   try {
     const lead = new Lead(req.body);
-    await lead.validate(); // explicit mongoose validation
+    await lead.validate(); 
     await lead.save();
     res.status(201).json(lead);
   } catch (error) {
