@@ -17,7 +17,7 @@ export default function Login() {
       const res = await api.post("/auth/login", form, { withCredentials: true }); // important
       // fetch current user after login
       const userRes = await api.get("/auth/me", { withCredentials: true });
-      setUser(userRes.data); // update AuthProvider state
+      setUser(userRes.data); 
       navigate("/dashboard");
     } catch (err) {
       console.error(err);
