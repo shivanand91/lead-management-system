@@ -12,7 +12,7 @@ export default function Register() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await api.post("/auth/register", form);
+      await api.post("/auth/register", form, { withCredentials: true });
       navigate("/login");
     } catch (err) {
       setError(err.response?.data?.message || "Something went wrong");
