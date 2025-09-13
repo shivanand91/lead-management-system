@@ -7,7 +7,7 @@ export const registerUser = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
-    
+
     if (!name || !email || !password) {
       return res.status(400).json({ message: "All fields (name, email, password) are required" });
     }
@@ -31,6 +31,17 @@ export const registerUser = async (req, res) => {
     }
 
     const user = await User.create({ name, email, password });
+    // Generate token and set cookie
+    const token = await generateToken(user._id);
+    res.cookie("jwt", token, cookieOptions);
+
+    // Save token in Token collection
+    await Token.create({
+      userId: user._id,
+      token,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    });
+
     res.status(201).json({ message: "User registered successfully", user });
   } catch (error) {
     console.error("Register Error:", error.message);
@@ -57,13 +68,21 @@ export const loginUser = async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-  
+
     const token = await generateToken(user._id);
     res.cookie("jwt", token, cookieOptions);
+
+    // Save token in Token collection
+    await Token.create({
+      userId: user._id,
+      token,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    });
 
     res.json({
       message: "Login successful",
       user: { id: user._id, name: user.name, email: user.email },
+      token
     });
   } catch (error) {
     console.error("Login Error:", error.message);
